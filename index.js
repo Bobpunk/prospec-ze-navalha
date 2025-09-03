@@ -3,12 +3,9 @@ const fs = require('fs');
 const fsp = require('fs').promises;
 const qrcode = require('qrcode-terminal');
 
-// ADICIONADO: Constante para o seu número. Verifique se está correto.
-const MEU_NUMERO = '558381810388@c.us'; 
-const PROSPECTS_FILE_PATH = './prospects.json';
+const MEU_NUMERO = '558381810388@c.us';
+const PROSPECTS_FILE_PATH = './prospects_validado.json';
 let prospects = [];
-
-// --- FUNÇÕES UTILITÁRIAS ---
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -17,10 +14,9 @@ function carregarProspects() {
         if (fs.existsSync(PROSPECTS_FILE_PATH)) {
             const data = fs.readFileSync(PROSPECTS_FILE_PATH, 'utf8');
             prospects = JSON.parse(data);
-            console.log(`✅ ${prospects.length} prospect(s) carregado(s).`);
+            console.log(`✅ ${prospects.length} prospect(s) carregado(s) da lista validada.`);
         } else {
-            console.log('📄 Arquivo de prospects não encontrado. Criando um novo.');
-            fs.writeFileSync(PROSPECTS_FILE_PATH, '[]', 'utf8');
+            console.log(`📄 Arquivo '${PROSPECTS_FILE_PATH}' não encontrado. Execute o 'validarLista.js' primeiro.`);
         }
     } catch (e) {
         console.error('❌ Erro fatal ao carregar prospects. Verifique o JSON.', e);
@@ -31,14 +27,11 @@ function carregarProspects() {
 async function salvarProspects() {
     try {
         await fsp.writeFile(PROSPECTS_FILE_PATH, JSON.stringify(prospects, null, 2), 'utf8');
-        console.log('💾 Status dos prospects salvo no arquivo.');
+        console.log('💾 Status dos prospects salvo no arquivo validado.');
     } catch (e) {
         console.error('❌ Erro ao salvar o status dos prospects:', e);
     }
 }
-
-
-// --- LÓGICA PRINCIPAL DO BOT ---
 
 const client = new Client({
     authStrategy: new LocalAuth({ clientId: "prospeccao-bot" }),
@@ -48,7 +41,7 @@ const client = new Client({
     },
     puppeteer: {
         headless: 'new',
-        executablePath: '/usr/bin/google-chrome', 
+        executablePath: '/usr/bin/google-chrome',
         args: ['--no-sandbox', '--disable-setuid-sandbox']
     }
 });
@@ -67,11 +60,11 @@ client.on('ready', async () => {
     if (alvos.length > 0) {
         console.log(`🚀 Iniciando campanha para ${alvos.length} novo(s) alvo(s)...`);
         for (const alvo of alvos) {
-            // POLIDO: Adicionado emoji na saudação
             const mensagemInicial = `Opa, tudo na paz por aí na ${alvo.nome}?\n\nMeu nome é *Zé Navalha*, sou um assistente de barbearia *100% autônomo*. Meu chefia queria saber se você teria 3 minutinhos pra demonstrar como eu funciono. É jogo rápido! 🚀`;
             
-            console.log(`📤 Enviando para ${alvo.nome}...`);
+            console.log(`📤 Enviando para ${alvo.nome} (${alvo.numero})...`);
             await client.sendMessage(alvo.numero, mensagemInicial);
+            
             alvo.status = 'contatado';
             
             const randomDelay = Math.floor(Math.random() * (35000 - 15000 + 1)) + 15000;
@@ -85,85 +78,83 @@ client.on('ready', async () => {
 });
 
 client.on('message', async (message) => {
-    const prospect = prospects.find(p => p.numero === message.from);
+    const prospectEncontrado = prospects.find(p => p.numero === message.from);
 
-    if (!prospect || prospect.status === 'desistiu' || prospect.status === 'finalizado') {
+    if (!prospectEncontrado || prospectEncontrado.status === 'desistiu' || prospectEncontrado.status === 'finalizado') {
         return;
     }
 
     const chat = await message.getChat();
     await chat.sendStateTyping();
     
-    console.log(`💬 Mensagem recebida de ${prospect.nome} (Status: ${prospect.status}): "${message.body}"`);
+    console.log(`💬 Mensagem recebida de ${prospectEncontrado.nome} (Status: ${prospectEncontrado.status}): "${message.body}"`);
 
     const textoMensagem = message.body.toLowerCase();
     const palavrasPositivas = ['sim', 'tenho', 'pode', 'manda', 'gostei', 'interessante', 'mais', 'legal', 'quero', 'claro', 'mostra', 'desejo', 'continuar'];
     const respostaPositiva = palavrasPositivas.some(palavra => textoMensagem.includes(palavra));
 
     try {
-        if (prospect.status === 'contatado') {
+        if (prospectEncontrado.status === 'contatado') {
             if (respostaPositiva) {
                 const media = MessageMedia.fromFilePath('./videos/1.mp4');
                 await chat.sendMessage(media, { caption: 'Show! 🎬 Neste primeiro vídeo, meu criador explica o problema que o Zé Navalha resolve no dia a dia de uma barbearia.' });
-                await delay(5000);
+                await delay(2000);
                 await chat.sendMessage('Quer ver como a inteligência artificial funciona na prática? 🤔');
-                prospect.status = 'video1_enviado';
+                prospectEncontrado.status = 'video1_enviado';
             } else {
                 await chat.sendMessage('Entendido. Sem problemas! 👍 Se mudar de ideia, é só chamar. Um abraço do Zé!');
-                prospect.status = 'desistiu';
+                prospectEncontrado.status = 'desistiu';
             }
         }
-        else if (prospect.status === 'video1_enviado') {
+        else if (prospectEncontrado.status === 'video1_enviado') {
             if (respostaPositiva) {
                  const media = MessageMedia.fromFilePath('./videos/2.mp4');
                  await chat.sendMessage(media, { caption: 'Neste segundo vídeo, você vai ver a inteligência do Zé em ação 🧠 e o painel de controle do patrão. 👑' });
                  await delay(2000);
                  await chat.sendMessage('Gostou? No próximo e último vídeo, te mostro os benefícios diretos pro seu negócio e a proposta final. 📈');
-                 prospect.status = 'video2_enviado';
+                 prospectEncontrado.status = 'video2_enviado';
             } else {
                 await chat.sendMessage('Beleza, campeão! 💪 Qualquer coisa, tô por aqui.');
-                prospect.status = 'desistiu';
+                prospectEncontrado.status = 'desistiu';
             }
         }
-        else if (prospect.status === 'video2_enviado') {
+        else if (prospectEncontrado.status === 'video2_enviado') {
             if (respostaPositiva) {
                  const media = MessageMedia.fromFilePath('./videos/3.mp4');
                  await chat.sendMessage(media, { caption: 'Pra fechar: aqui estão os benefícios claros e a nossa oferta de lançamento. É a melhor parte! 🎁' });
                  await delay(2000);
                  await chat.sendMessage('Se essa ideia fez sentido pra você, me dá um último "sim" pra eu te mandar a proposta por texto e a gente fechar negócio. ✅');
-                 prospect.status = 'interesse_final';
+                 prospectEncontrado.status = 'interesse_final';
             } else {
                 await chat.sendMessage('Ok, meu nobre. A navalha segue afiada por aqui se precisar. 💈');
-                prospect.status = 'desistiu';
+                prospectEncontrado.status = 'desistiu';
             }
         }
-        else if (prospect.status === 'interesse_final') {
+        else if (prospectEncontrado.status === 'interesse_final') {
              if (respostaPositiva) {
-                const proposta = "Top! Fico feliz que tenha curtido. 👍\n\nComo você viu, a proposta é um *teste gratuito de 30 dias*, sem nenhum compromisso, com acesso a todas as funcionalidades atuais e as novas a serem implantadas.\n\nMeu Patrão (O Bob) pode te chamar para acertar os detalhes. Posso pedir pra ele entrar em contato?";
+                const proposta = "Top! Fico feliz que tenha curtido. 👍\n\nComo você viu, a proposta é um *teste gratuito de 15 dias*, sem nenhum compromisso, com acesso a todas as funcionalidades.\n\nMeu Patrão (o dev que me criou) pode te chamar para acertar os detalhes. Posso pedir pra ele entrar em contato?";
                 await chat.sendMessage(proposta);
                 
-                // ADICIONADO: Lógica de notificação para você
-                console.log(`🔔 Notificando o Patrão sobre o novo lead: ${prospect.nome}`);
-                const mensagemPatrao = `🔥 Lead Quente! 🔥\n\nA barbearia *${prospect.nome}* finalizou o funil e aceitou o contato!\n\n*Próximo passo:* Entre em contato com eles pelo número: ${prospect.numero.replace('@c.us', '')}`;
+                console.log(`🔔 Notificando o Patrão sobre o novo lead: ${prospectEncontrado.nome}`);
+                const mensagemPatrao = `🔥 Lead Quente! 🔥\n\nA barbearia *${prospectEncontrado.nome}* finalizou o funil e aceitou o contato!\n\n*Próximo passo:* Entre em contato com eles pelo número: ${message.from.replace('@c.us', '')}`;
                 await client.sendMessage(MEU_NUMERO, mensagemPatrao);
 
-                prospect.status = 'finalizado';
+                prospectEncontrado.status = 'finalizado';
              } else {
                 await chat.sendMessage('Tranquilo! Se precisar, é só dar um toque. 😉');
-                prospect.status = 'desistiu';
+                prospectEncontrado.status = 'desistiu';
              }
         }
         
         await salvarProspects();
 
     } catch (e) {
-        console.error(`❌ Erro ao processar mensagem de ${prospect.nome}:`, e);
+        console.error(`❌ Erro ao processar mensagem de ${prospectEncontrado.nome}:`, e);
     } finally {
         await chat.clearState();
     }
 });
 
-// --- INICIALIZAÇÃO ---
 function start() {
     console.log("Iniciando Bot de Prospecção Zé Navalha...");
     carregarProspects();
